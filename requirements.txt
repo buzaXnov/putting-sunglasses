@@ -1,0 +1,5 @@
+numpy
+opencv-python
+face_alignment
+Flask
+requests
