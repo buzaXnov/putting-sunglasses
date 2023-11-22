@@ -1,4 +1,3 @@
-import math
 import os
 
 import cv2
@@ -7,170 +6,75 @@ import numpy as np
 
 
 def detect_face():
-    detector = face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, device='cpu', flip_input=False, verbose=False)
+    detector = face_alignment.FaceAlignment(
+        face_alignment.LandmarksType.TWO_D, device='cpu', flip_input=False, verbose=False)
     return detector
+
 
 def load_assets(filename):
     image_filename = filename + ".png"
-    points_filename = filename + ".txt"
-    image_path = os.path.join(os.getcwd(), "assets", "sunglasses", image_filename)
-    points_path = os.path.join(os.getcwd(), "assets", "sunglasses", points_filename)
-
+    image_path = os.path.join(os.getcwd(), "assets",
+                              "sunglasses", image_filename)
     image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-    points = np.loadtxt(points_path, dtype="uint16")
 
-    return image, points
+    return image
 
 
 def draw_landmarks(img, landmarks):
     for i, points in enumerate(landmarks.parts()):
         px = int(points[0])
         py = int(points[1])
-        cv2.circle(img, (px, py), 1, (255, 0, 255), thickness=2, lineType=cv2.LINE_AA)
-        cv2.putText(img, str(i+1), (px, py), cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 255, 0), 1)
+        cv2.circle(img, (px, py), 1, (255, 0, 255),
+                   thickness=2, lineType=cv2.LINE_AA)
+        cv2.putText(img, str(i+1), (px, py),
+                    cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 255, 0), 1)
 
 
-def degree_to_radius(degree):
-    return degree * math.pi / 180.0
+def blur_face(img, bbox):
+    # If the circles overlap, blur the face
+    face = img[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])]
+    blurred_face = cv2.GaussianBlur(face, (3, 3), 11)
+    img[int(bbox[1]):int(bbox[3]), int(bbox[0]):int(bbox[2])] = blurred_face
+
+    return img
 
 
-def get_radius(theta, phi, gamma):
-    rad_theta = degree_to_radius(theta)
-    rad_phi = degree_to_radius(phi)
-    rad_gamma = degree_to_radius(gamma)
+def rotate_sunglasses(img, dx, dy):
+    # Rotate the sunglasses image
+    angle = np.arctan2(dy, dx) * 180 / np.pi
+    rows, cols, _ = img.shape
+    M = cv2.getRotationMatrix2D((cols / 2, rows / 2), -angle, 1)
+    img = cv2.warpAffine(
+        img, M, (cols, rows),  flags=cv2.INTER_AREA)
 
-    return rad_theta, rad_phi, rad_gamma
-
-
-def get_perspective_projection_matrix(width, height, focal, theta, phi, gamma, dx, dy, dz):
-    # project 2D -> 3D matrix
-    A1 = np.array(
-        [
-            [1, 0, -width/2],
-            [0, 1, -height/2],
-            [0, 0, 1],
-            [0, 0, 1],
-        ]
-    )
-
-    # rotation matrices arount the x, y, z axis
-    RX = np.array(
-        [
-            [1, 0, 0, 0],
-            [0, np.cos(theta), -np.sin(theta), 0],
-            [0, np.sin(theta), np.cos(theta), 0],
-            [0, 0, 0, 1],
-        ]
-    )
-    RY = np.array(
-        [
-            [np.cos(phi), 0, -np.sin(phi), 0],
-            [0, 1, 0, 0],
-            [np.sin(phi), 0, np.cos(phi), 0],
-            [0, 0, 0, 1],
-        ]
-    )
-    RZ = np.array(
-        [
-            [np.cos(gamma), -np.sin(gamma), 0, 0],
-            [np.sin(gamma), np.cos(gamma), 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-        ]
-    )
-
-    # composed rotation matrix with RX, RY, RZ
-    R = np.dot(np.dot(RX, RY), RZ)
-
-    # translation matrix
-    T = np.array(
-        [
-            [1, 0, 0, dx],
-            [0, 1, 0, dy],
-            [0, 0, 1, dz],
-            [0, 0, 0, 1],
-        ]
-    )
-
-    # project 3D -> 2D matrix
-    A2 = np.array(
-        [
-            [focal, 0, width/2, 0],
-            [0, focal, height/2, 0],
-            [0, 0, 1, 0],
-        ]
-    )
-
-    # transformation matrix
-    result = np.dot(A2, np.dot(T, np.dot(R, A1)))
-
-    return result
+    return img
 
 
-def get_orientation(width, height, landmarks):
-    image_points = np.array(
-        [
-            (landmarks[30][0], landmarks[30][1]),     # nose tip
-            (landmarks[8][0], landmarks[8][1]),       # chin
-            (landmarks[36][0], landmarks[36][1]),     # left eye left corner
-            (landmarks[45][0], landmarks[45][1]),     # right eye right corner
-            (landmarks[48][0], landmarks[48][1]),     # left mouth corner
-            (landmarks[54][0], landmarks[54][1])      # right mouth corner
-        ],
-        dtype="double",
-    )
+def add_border_to_image(img):
+    # Calculate the diagonal length of the resized image
+    # NOTE: Could cause issues if the face crop is too large???
+    diagonal = int(
+        np.sqrt(img.shape[0]**2 + img.shape[1]**2))
 
-    model_points = np.array(
-        [
-            (0.0, 0.0, 0.0),             # nose tip
-            (0.0, -330.0, -65.0),        # chin
-            (-165.0, 170.0, -135.0),     # left eye left corner
-            (165.0, 170.0, -135.0),      # right eye right corner
-            (-150.0, -150.0, -125.0),    # left mouth corner
-            (150.0, -150.0, -125.0)      # right mouth corner
-        ]
-    )
+    # Calculate the amount of border needed on each side
+    border_vertical = (diagonal - img.shape[0]) // 2
+    border_horizontal = (diagonal - img.shape[1]) // 2
 
-    center = (width/2, height/2)
-    focal_length = center[0] / np.tan(60 / (2 * np.pi / 180))
-    camera_matrix = np.array(
-        [
-            [focal_length, 0, center[0]],
-            [0, focal_length, center[1]],
-            [0, 0, 1]
-        ],
-        dtype="double",
-    )
+    # Add the border to the image
+    img = cv2.copyMakeBorder(img, border_vertical, border_vertical,
+                             border_horizontal, border_horizontal, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
 
-    dist_coeffs = np.zeros((4, 1))
-    _, r_vec, trans_vec = cv2.solvePnP(model_points, image_points, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
-
-    r_vector_matrix = cv2.Rodrigues(r_vec)[0]
-
-    project_matrix = np.hstack((r_vector_matrix, trans_vec))
-    euler_angles = cv2.decomposeProjectionMatrix(project_matrix)[6]
-
-    pitch, yaw, roll = [math.radians(_) for _ in euler_angles]
-
-    pitch = math.degrees(math.asin(math.sin(pitch)))
-    roll = math.degrees(math.asin(math.sin(roll)))
-    yaw = -math.degrees(math.asin(math.sin(yaw)))
-
-    return int(pitch), int(roll), int(yaw)
+    return img
 
 
-def rotate_along_axis(img, width, height, theta=0, phi=0, gamma=0, dx=0, dy=0, dz=0):
-    
-    sunglasses = cv2.resize(img, (width, height))
-    rad_theta, rad_phi, rad_gamma = get_radius(theta, phi, gamma)
+def rescale_to_facesize(img, dx, dy):
+    # Calculate the aspect ratio of the sunglasses image
+    aspect_ratio = img.shape[1] / img.shape[0]
 
-    # get focal length on z axis
-    dist = np.sqrt(width**2 + height**2)
-    focal = dist / (2 * np.sin(rad_gamma) if np.sin(rad_gamma) != 0 else 1)
-    dz = focal
+    # Calculate the width and height of the sunglasses
+    width = max(1, int(np.sqrt(dx**2 + dy**2)))
+    height = max(1, int(width / aspect_ratio))
+    img = cv2.resize(
+        img, (width, height), interpolation=cv2.INTER_AREA)
 
-    # get projection matrix
-    mat = get_perspective_projection_matrix(width, height, focal, rad_theta, rad_phi, rad_gamma, dx, dy, dz)
-    result = cv2.warpPerspective(sunglasses, mat, (width, height))
-
-    return result
+    return img
