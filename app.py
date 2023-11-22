@@ -6,6 +6,7 @@ import numpy as np
 
 app = Flask(__name__)
 
+
 @app.route('/insert_sunglasses', methods=['POST'])
 def insert_sunglasses():
     # Get the image from the request
@@ -25,7 +26,7 @@ def insert_sunglasses():
 
     # Convert the result into bytes
     is_success, buffer = cv2.imencode(f".{img_format}", result)
-    
+
     if not is_success:
         print(f"Error when converting results into bytes. {is_success}")
 
@@ -33,6 +34,7 @@ def insert_sunglasses():
 
     # Return the result
     return send_file(byte_io, mimetype=f"image/{img_format.lower()}")
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
