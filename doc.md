@@ -25,3 +25,24 @@ The `save_landmarks` and `save_results` methods are left in the class definition
 The `run` method takes the image loaded by the Flask endpoint and loads it into the face alignment detector after which the sunglasses are properly transformed and placed on the head of the wearer. If the face is too small, it will be blurred. The method returns the image that the Flask app enodes and returns. 
 
 The Flask application exposes a single endpoint (/insert_sunglasses) that accepts POST requests. When a request is received, it reads the image from the request, applies the sunglasses using an instance of PutOn, and returns the resulting image.
+
+## Steps for running locally
+Open your terminal and create a Python virtual environment for the project to install all the dependencies (libraries):
+
+`$ python -m venv .env //optional`
+
+Activating the environment to start working: 
+
+`$ source .env/bin/activate `
+
+Install all the dependencies (external libraries) necessary to run the code: 
+`$ pip intall -r requirements.txt `
+
+Run the API endpoint where the images will be sent and received from: 
+`$ python app.py`
+
+Run the `test_api_folder.py` file to send the images and save the results:
+
+`$ python test_api_folder.py`
+
+ Make sure that the images are saved in the folder called `faces` and the results will be saved in a folder called `results` that will be created automatically if it does not exist. 
